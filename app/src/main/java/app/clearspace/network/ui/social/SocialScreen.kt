@@ -45,6 +45,13 @@ fun SocialScreen(modifier: Modifier = Modifier, onNavigateToGroups: () -> Unit =
                     }
                 }
             }
+            
+            app.clearspace.network.ui.components.InfoCard(
+                title = "Network & Identity",
+                description = "Connect with nearby users or exchange Trust QRs to build your private network. Your profile is only visible if you enable it.",
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
             @OptIn(ExperimentalLayoutApi::class)
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),

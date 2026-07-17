@@ -35,7 +35,8 @@ data class ContentUnit(
     val recipientKeyMapJson: String? = null,
     // FIX C3: Ed25519 authorship signature. Null = legacy unsigned content (treated as valid).
     val authorSignatureBase64: String? = null,
-    val authorPublicKeyBase64: String? = null
+    val authorPublicKeyBase64: String? = null,
+    val spaceId: String? = null
 )
 
 

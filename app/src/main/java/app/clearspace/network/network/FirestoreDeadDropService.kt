@@ -59,15 +59,8 @@ class FirestoreDeadDropService : Service() {
             }
 
             if (contentUnit.imagePath != null || contentUnit.videoPath != null) {
-                Log.d("FirestoreDeadDrop", "Media detected. Waiting for Tor Onion Address before uploading drop...")
-                val torManager = app.clearspace.network.tor.TorManager.getInstance(applicationContext)
-                torManager.onionAddress.first { it != null }
-                
-                val mediaIntent = Intent(applicationContext, TorMediaService::class.java).apply {
-                    action = TorMediaService.ACTION_START_STREAM
-                    putExtra(TorMediaService.EXTRA_CONTENT_HASH, contentUnit.contentHash)
-                }
-                startService(mediaIntent)
+                Log.d("FirestoreDeadDrop", "Media detected. WebRTC stream will be established later...")
+                // TODO: Implement WebRTC signaling for media
             }
 
             val privateDb = AetherDatabase.getPrivateDatabase()
@@ -151,15 +144,8 @@ class FirestoreDeadDropService : Service() {
             }
 
             if (contentUnit.imagePath != null || contentUnit.videoPath != null) {
-                Log.d("FirestoreDeadDrop", "Media detected in Gossip. Waiting for Tor Onion Address...")
-                val torManager = app.clearspace.network.tor.TorManager.getInstance(applicationContext)
-                torManager.onionAddress.first { it != null }
-                
-                val mediaIntent = Intent(applicationContext, TorMediaService::class.java).apply {
-                    action = TorMediaService.ACTION_START_STREAM
-                    putExtra(TorMediaService.EXTRA_CONTENT_HASH, contentUnit.contentHash)
-                }
-                startService(mediaIntent)
+                Log.d("FirestoreDeadDrop", "Media detected in Gossip. WebRTC stream will be established later...")
+                // TODO: Implement WebRTC signaling for media
             }
 
             val privateDb = AetherDatabase.getPrivateDatabase()

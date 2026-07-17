@@ -14,6 +14,17 @@ class LibraryViewModel : ViewModel() {
     private val _libraryContent = MutableStateFlow<List<ContentUnit>>(emptyList())
     val libraryContent: StateFlow<List<ContentUnit>> = _libraryContent.asStateFlow()
 
+    private val _viewingContent = MutableStateFlow<ContentUnit?>(null)
+    val viewingContent: StateFlow<ContentUnit?> = _viewingContent.asStateFlow()
+
+    fun openContent(content: ContentUnit) {
+        _viewingContent.value = content
+    }
+
+    fun clearViewingContent() {
+        _viewingContent.value = null
+    }
+
     init {
         loadContent()
     }

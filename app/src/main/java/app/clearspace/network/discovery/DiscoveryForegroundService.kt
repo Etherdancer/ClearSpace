@@ -20,7 +20,12 @@ import android.content.ComponentName
 import app.clearspace.network.IAetherIpc
 import app.clearspace.network.storage.AetherDatabaseService
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import app.clearspace.network.network.webrtc.WebRtcSwarmAgent
+import app.clearspace.network.network.WebRtcManager
+import app.clearspace.network.storage.db.AetherDatabase
+import app.clearspace.network.discovery.ContentHeader
 
 class DiscoveryForegroundService : Service() {
 
@@ -191,6 +196,53 @@ class DiscoveryForegroundService : Service() {
                     ipc.enforceStorageQuota()
                 } catch (e: Exception) {}
                 kotlinx.coroutines.delay(5 * 60 * 1000L) // Check every 5 minutes
+            }
+        }
+
+        // WebRTC Global Swarm configuration
+        val webRtcManager = WebRtcManager.getInstance(this)
+        webRtcManager.onDataReceived = { message ->
+            coroutineScope.launch {
+                try {
+                    if (message == "GET_INDEX") {
+                        // Send my local shared content headers
+                        val sharedDb = AetherDatabase.getSharedDatabase()
+                        val myShared = sharedDb.contentDao().getAll()
+                        val headers = myShared.map { local ->
+                            ContentHeader(
+                                contentHash = local.contentHash,
+                                title = local.title,
+                                authorAlias = local.authorAlias,
+                                timestamp = local.timestamp,
+                                thumbnailBase64 = local.thumbnailBase64,
+                                categoryFlags = local.categoryFlags,
+                                emotionFlags = local.emotionFlags,
+                                reputationScore = local.likeTokens.size - local.dislikeTokens.size,
+                                spaceId = local.spaceId
+                            )
+                        }
+                        val json = Json.encodeToString(headers)
+                        webRtcManager.sendData(json)
+                    } else if (message.startsWith("[")) { // Simple JSON array check
+                        // Received peer's content headers
+                        val headers = Json.decodeFromString<List<ContentHeader>>(message)
+                        app.clearspace.network.discovery.PeerRepository.addGlobalWebRtcHeaders("webrtc-global", headers)
+                        android.util.Log.d("DiscoveryForegroundService", "Received ${headers.size} headers via WebRTC")
+                        webRtcManager.close() // Close connection after sync
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("DiscoveryForegroundService", "Error in WebRTC onDataReceived", e)
+                }
+            }
+        }
+
+        val swarmAgent = WebRtcSwarmAgent(this)
+        coroutineScope.launch {
+            while (isActive) {
+                try {
+                    swarmAgent.syncWithRandomGlobalPeer()
+                } catch (e: Exception) {}
+                kotlinx.coroutines.delay(10 * 60 * 1000L) // Random global peer every 10 mins
             }
         }
     }

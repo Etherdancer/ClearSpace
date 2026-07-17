@@ -40,7 +40,8 @@ data class ContentHeader(
     val thumbnailBase64: String?,
     val categoryFlags: String,
     val emotionFlags: String,
-    val reputationScore: Int
+    val reputationScore: Int,
+    val spaceId: String? = null
 )
 
 class P2PServer(
@@ -292,9 +293,11 @@ object P2PClient {
 
     suspend fun fetchIndex(ip: String, port: Int): List<ContentHeader>? = withContext(Dispatchers.IO) {
         try {
-            SecureP2PManager.getSocketFactory().createSocket(ip, port).use { socket ->
-                socket.soTimeout = 5000
-                val writer = PrintWriter(socket.getOutputStream(), true)
+            val socket = SecureP2PManager.getSocketFactory().createSocket()
+            socket.use { s ->
+                s.connect(java.net.InetSocketAddress(ip, port), 2000)
+                s.soTimeout = 5000
+                val writer = java.io.PrintWriter(s.getOutputStream(), true)
                 writer.println("INDEX_v1 ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream())
@@ -310,9 +313,11 @@ object P2PClient {
 
     suspend fun fetchContent(ip: String, port: Int, hash: String): ContentUnit? = withContext(Dispatchers.IO) {
         try {
-            SecureP2PManager.getSocketFactory().createSocket(ip, port).use { socket ->
-                socket.soTimeout = 10000
-                val writer = PrintWriter(socket.getOutputStream(), true)
+            val socket = SecureP2PManager.getSocketFactory().createSocket()
+            socket.use { s ->
+                s.connect(java.net.InetSocketAddress(ip, port), 2000)
+                s.soTimeout = 10000
+                val writer = java.io.PrintWriter(s.getOutputStream(), true)
                 writer.println("GET_v1 $hash ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream())

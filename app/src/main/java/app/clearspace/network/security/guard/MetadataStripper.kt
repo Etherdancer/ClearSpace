@@ -22,10 +22,10 @@ class MetadataStripper(private val context: Context) {
      * WebP is chosen for efficiency and because re-encoding inherently drops EXIF.
      * 
      * @param inputStream The raw image input stream containing potential metadata.
-     * @param quality Encoding quality (0-100).
+     * @param quality Encoding quality (0-100). 100 forces lossless in older WebP versions.
      * @return A ByteArray containing the clean, metadata-free image.
      */
-    fun scrubImageMetadata(inputStream: InputStream, quality: Int = 85): ByteArray? {
+    fun scrubImageMetadata(inputStream: InputStream, quality: Int = 100): ByteArray? {
         return try {
             // Decode the image into a raw bitmap (drops metadata in memory)
             val bitmap = BitmapFactory.decodeStream(inputStream) ?: return null
@@ -35,7 +35,7 @@ class MetadataStripper(private val context: Context) {
             
             // Android 11+ (API 30+) recommends WEBP_LOSSLESS or WEBP_LOSSY
             val compressFormat = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                Bitmap.CompressFormat.WEBP_LOSSY
+                Bitmap.CompressFormat.WEBP_LOSSLESS
             } else {
                 @Suppress("DEPRECATION")
                 Bitmap.CompressFormat.WEBP
@@ -55,7 +55,7 @@ class MetadataStripper(private val context: Context) {
     /**
      * Strips metadata and writes directly to a safe output file in the app's private storage.
      */
-    fun scrubAndSaveImage(inputStream: InputStream, outputFile: File, quality: Int = 85): Boolean {
+    fun scrubAndSaveImage(inputStream: InputStream, outputFile: File, quality: Int = 100): Boolean {
         val cleanBytes = scrubImageMetadata(inputStream, quality) ?: return false
         return try {
             FileOutputStream(outputFile).use { fos ->

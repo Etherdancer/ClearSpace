@@ -50,7 +50,7 @@ val EMOTIONS = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateContentScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit, initialTitle: String = "", initialBody: String = "", forceVisibilityGroup: Boolean = false) {
+fun CreateContentScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit, initialTitle: String = "", initialBody: String = "", forceVisibilityGroup: Boolean = false, spaceId: String? = null) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
@@ -433,7 +433,8 @@ fun CreateContentScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Uni
                                 imagePath = imgPath,
                                 videoPath = vidPath,
                                 thumbnailBase64 = thumb64,
-                                recipientKeyMapJson = recipientKeyMapJsonToSave
+                                recipientKeyMapJson = recipientKeyMapJsonToSave,
+                                spaceId = spaceId
                             )
                             
                             val unitJson = kotlinx.serialization.json.Json.encodeToString(app.clearspace.network.storage.db.entity.ContentUnit.serializer(), unit)

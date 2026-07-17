@@ -14,6 +14,7 @@ import app.clearspace.network.crypto.KeyManager
 import app.clearspace.network.discovery.ContentHeader
 import app.clearspace.network.discovery.PeerRepository
 import app.clearspace.network.discovery.P2PClient
+import app.clearspace.network.discovery.DiscoveryManager
 import app.clearspace.network.reputation.ReputationAgent
 import app.clearspace.network.storage.db.AetherDatabase
 import app.clearspace.network.storage.db.entity.ContentUnit
@@ -55,13 +56,27 @@ class SharedBrowseViewModel(application: Application) : AndroidViewModel(applica
             val peersFlow = db.peerDao().getAllPeers()
             val blockedFlow = db.blockedAuthorDao().getAllBlocked()
             val localSharedFlow = sharedDb.contentDao().getSharedContentFlow()
-            combine(
+            
+            val flow1 = combine(
                 PeerRepository.discoveredPeers,
-                _sourceFilter,
+                PeerRepository.globalWebRtcHeaders,
+                _sourceFilter
+            ) { a, b, c -> Triple(a, b, c) }
+            
+            val flow2 = combine(
                 peersFlow,
                 localSharedFlow,
                 blockedFlow
-            ) { discoveredPeers, filter, knownPeers, localSharedContent, blockedAuthors ->
+            ) { a, b, c -> Triple(a, b, c) }
+
+            combine(flow1, flow2) { t1, t2 ->
+                val discoveredPeers = t1.first as List<app.clearspace.network.discovery.PresencePacket>
+                val globalWebRtcHeaders = t1.second as List<Pair<String, ContentHeader>>
+                val filter = t1.third as SourceFilter
+                val knownPeers = t2.first as List<app.clearspace.network.storage.db.entity.KnownPeer>
+                val localSharedContent = t2.second as List<app.clearspace.network.storage.db.entity.ContentUnit>
+                val blockedAuthors = t2.third as List<app.clearspace.network.storage.db.entity.BlockedAuthor>
+                
                 val blockedIds = blockedAuthors.map { it.authorId }.toSet()
                 val newHeaders = mutableListOf<Pair<String, ContentHeader>>()
                 
@@ -85,7 +100,8 @@ class SharedBrowseViewModel(application: Application) : AndroidViewModel(applica
                             thumbnailBase64 = local.thumbnailBase64,
                             categoryFlags = local.categoryFlags,
                             emotionFlags = local.emotionFlags,
-                            reputationScore = local.likeTokens.size - local.dislikeTokens.size
+                            reputationScore = local.likeTokens.size - local.dislikeTokens.size,
+                            spaceId = local.spaceId
                         )
                         newHeaders.add(Pair("local:0", header))
                     }
@@ -117,6 +133,22 @@ class SharedBrowseViewModel(application: Application) : AndroidViewModel(applica
                         }
                     }
                 }
+                
+                for (pair in globalWebRtcHeaders) {
+                    val header = pair.second
+                    if (blockedIds.contains(header.authorAlias)) continue
+                    val isAcquaintance = knownPeers.any { it.alias == header.authorAlias }
+                    val isTrusted = knownPeers.any { it.alias == header.authorAlias && it.trustLevel != TrustLevel.ACQUAINTANCE }
+                    
+                    val include = when (filter) {
+                        SourceFilter.ALL -> true
+                        SourceFilter.ACQUAINTANCES -> isAcquaintance
+                        SourceFilter.TRUSTED -> isTrusted
+                    }
+                    if (include) {
+                        newHeaders.add(pair)
+                    }
+                }
                 newHeaders
             }.collect { filtered ->
                 _sharedHeaders.value = filtered
@@ -128,28 +160,38 @@ class SharedBrowseViewModel(application: Application) : AndroidViewModel(applica
         _viewingContent.value = null
     }
 
+    private var openContentJob: kotlinx.coroutines.Job? = null
+
+    fun cancelLoading() {
+        openContentJob?.cancel()
+        _loadingHeader.value = false
+    }
+
     fun openContent(ipPort: String, hash: String) {
-        viewModelScope.launch {
+        openContentJob?.cancel()
+        openContentJob = viewModelScope.launch {
             _loadingHeader.value = true
-            val parts = ipPort.split(":")
-            var content: ContentUnit? = null
-            
-            if (parts.size == 2) {
-                val ip = parts[0]
-                val port = parts[1].toIntOrNull() ?: 0
-                try {
-                    content = P2PClient.fetchContent(ip, port, hash)
-                } catch(e: Exception) {}
-            }
-            
-            if (content == null) {
-                content = sharedDb.contentDao().getByHash(hash)
-                if (content == null) {
-                    content = db.contentDao().getByHash(hash)
-                }
-            }
-            
             try {
+                val parts = ipPort.split(":")
+                var content: ContentUnit? = null
+                
+                if (parts.size == 2) {
+                    val ip = parts[0]
+                    val port = parts[1].toIntOrNull() ?: 0
+                    try {
+                        content = kotlinx.coroutines.withTimeoutOrNull(5000) {
+                            P2PClient.fetchContent(ip, port, hash)
+                        }
+                    } catch(e: Exception) {}
+                }
+                
+                if (content == null) {
+                    content = sharedDb.contentDao().getByHash(hash)
+                    if (content == null) {
+                        content = db.contentDao().getByHash(hash)
+                    }
+                }
+                
                 if (content != null && content.visibility == Visibility.GROUP && content.recipientKeyMapJson != null) {
                     val keyManager = KeyManager(getApplication())
                     val myX25519Priv = keyManager.getOrGenerateEncryptionIdentity().first
@@ -178,25 +220,26 @@ class SharedBrowseViewModel(application: Application) : AndroidViewModel(applica
                     val localStub = sharedDb.contentDao().getByHash(hash)
                     if (localStub != null && content !== localStub) {
                         val repAgent = ReputationAgent(getApplication(), KeyManager(getApplication()))
-                        content = repAgent.mergeReputation(localStub, content!!)
+                        content = repAgent.mergeReputation(localStub, content)
                         
-                        val totalInteractions = content!!.likeTokens.size + content!!.dislikeTokens.size
+                        val totalInteractions = content.likeTokens.size + content.dislikeTokens.size
                         val dynamicThreshold = maxOf(10, (totalInteractions * 0.05).toInt())
                         
-                        if (content!!.reportTokens.size >= dynamicThreshold) {
+                        if (content.reportTokens.size >= dynamicThreshold) {
                             sharedDb.contentDao().delete(hash)
                             db.blacklistDao().insertAll(listOf(app.clearspace.network.storage.db.entity.BlacklistEntry(hash, System.currentTimeMillis())))
                             content = null
                         } else {
-                            sharedDb.contentDao().insert(content!!)
+                            sharedDb.contentDao().insert(content)
                         }
                     }
                 }
                 _viewingContent.value = content
             } catch(e: Exception) {
                 // Log
+            } finally {
+                _loadingHeader.value = false
             }
-            _loadingHeader.value = false
         }
     }
     

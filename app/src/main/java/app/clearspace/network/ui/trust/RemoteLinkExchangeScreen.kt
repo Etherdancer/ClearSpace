@@ -13,11 +13,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import app.clearspace.network.crypto.KeyManager
 import app.clearspace.network.ui.utilities.QrCodeGenerator
+import app.clearspace.network.network.WebRtcManager
+import org.webrtc.PeerConnection
 
 @Composable
 fun RemoteLinkExchangeScreen(modifier: Modifier = Modifier, onBack: () -> Unit, onNavigateToScanner: () -> Unit) {
     val context = LocalContext.current
     val keyManager = remember { KeyManager(context) }
+    val webRtcManager = remember { WebRtcManager.getInstance(context) }
+    val connectionState by webRtcManager.connectionState.collectAsState()
     
     // Generate a one-time rendezvous token
     val rendezvousToken = remember { java.util.UUID.randomUUID().toString() }
@@ -33,6 +37,16 @@ fun RemoteLinkExchangeScreen(modifier: Modifier = Modifier, onBack: () -> Unit, 
     
     val shareLink = "ClearSpace://trust?pk=$pubKeyFingerprint&rt=$rendezvousToken&sig=$sigBase64"
     val qrBitmap = remember(shareLink) { QrCodeGenerator.generate(shareLink) }
+
+    LaunchedEffect(rendezvousToken) {
+        webRtcManager.startCall(roomId = rendezvousToken, isCaller = true)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            webRtcManager.close()
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
         Text("Trust Verification", style = MaterialTheme.typography.headlineMedium)
@@ -89,9 +103,18 @@ fun RemoteLinkExchangeScreen(modifier: Modifier = Modifier, onBack: () -> Unit, 
         Spacer(modifier = Modifier.height(32.dp))
         
         Text("Step 2: Wait for Connection", style = MaterialTheme.typography.titleMedium)
-        Text("Once they open your link, ClearSpace will establish a secure connection using Tor hidden services to complete the handshake.", modifier = Modifier.padding(top = 4.dp))
+        Text("Once they open your link, ClearSpace will establish a secure connection using WebRTC to complete the handshake.", modifier = Modifier.padding(top = 4.dp))
         
-        CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+        Text("Status: ${connectionState.name}", modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.primary)
+
+        if (connectionState != PeerConnection.IceConnectionState.CONNECTED && connectionState != PeerConnection.IceConnectionState.COMPLETED) {
+            CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
+        } else {
+            Text("Connection Established! Verifying Trust...", color = MaterialTheme.colorScheme.primary)
+            LaunchedEffect(Unit) {
+                app.clearspace.network.storage.sync.ClearSyncManager.getInstance(context).triggerSyncHandshake()
+            }
+        }
         
         Spacer(modifier = Modifier.weight(1f))
         

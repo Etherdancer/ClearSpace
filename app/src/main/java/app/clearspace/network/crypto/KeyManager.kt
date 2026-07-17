@@ -340,4 +340,56 @@ class KeyManager(context: Context) {
         val encrypted = payload.copyOfRange(GCM_IV_LENGTH, payload.size)
         return cipher.doFinal(encrypted)
     }
+
+    // --- Password Recovery Support ---
+    
+    fun resetPassword(newArgon2Hash: ByteArray, sqlCipherKey: ByteArray) {
+        require(newArgon2Hash.size == 32) { "Argon2 hash must be 32 bytes" }
+        require(sqlCipherKey.size == 32) { "SQLCipher key must be 32 bytes" }
+        
+        val newDbSecret = ByteArray(32)
+        for (i in 0 until 32) {
+            newDbSecret[i] = (sqlCipherKey[i].toInt() xor newArgon2Hash[i].toInt()).toByte()
+        }
+        val enc = encryptData(newDbSecret)
+        prefs.edit().putString(KEY_DB_SECRET, android.util.Base64.encodeToString(enc, android.util.Base64.DEFAULT)).apply()
+    }
+
+    fun setupSecurityQuestions(answers: List<String>, sqlCipherKey: ByteArray) {
+        val concatenated = answers.joinToString("|").lowercase().trim()
+        val (_, recoveryKey) = PasswordHasher.hash(concatenated.toCharArray(), clearPassword = false)
+        val encryptedSqlCipherKey = encryptPayloadE2EE(sqlCipherKey, recoveryKey)
+        prefs.edit().putString("recovery_sq_payload", android.util.Base64.encodeToString(encryptedSqlCipherKey, android.util.Base64.DEFAULT)).apply()
+        java.util.Arrays.fill(recoveryKey, 0.toByte())
+    }
+
+    fun recoverWithSecurityQuestions(answers: List<String>): ByteArray? {
+        val payloadStr = prefs.getString("recovery_sq_payload", null) ?: return null
+        val payload = android.util.Base64.decode(payloadStr, android.util.Base64.DEFAULT)
+        val concatenated = answers.joinToString("|").lowercase().trim()
+        val (_, recoveryKey) = PasswordHasher.hash(concatenated.toCharArray(), clearPassword = false)
+        return try {
+            val key = decryptPayloadE2EE(payload, recoveryKey)
+            java.util.Arrays.fill(recoveryKey, 0.toByte())
+            key
+        } catch (e: Exception) {
+            java.util.Arrays.fill(recoveryKey, 0.toByte())
+            null
+        }
+    }
+
+    fun setupEmergencyKey(emergencyKey: ByteArray, sqlCipherKey: ByteArray) {
+        val encryptedSqlCipherKey = encryptPayloadE2EE(sqlCipherKey, emergencyKey)
+        prefs.edit().putString("recovery_ek_payload", android.util.Base64.encodeToString(encryptedSqlCipherKey, android.util.Base64.DEFAULT)).apply()
+    }
+
+    fun recoverWithEmergencyKey(emergencyKey: ByteArray): ByteArray? {
+        val payloadStr = prefs.getString("recovery_ek_payload", null) ?: return null
+        val payload = android.util.Base64.decode(payloadStr, android.util.Base64.DEFAULT)
+        return try {
+            decryptPayloadE2EE(payload, emergencyKey)
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

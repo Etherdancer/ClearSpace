@@ -27,7 +27,8 @@ fun LockScreen(
     onSubmitPassword: (String) -> Unit,
     onBiometricClick: () -> Unit = {},
     onEnrollBiometric: (String) -> Unit = {},
-    canUseBiometric: Boolean = false
+    canUseBiometric: Boolean = false,
+    onRecoverPassword: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var password by remember { mutableStateOf("") }
@@ -36,134 +37,143 @@ fun LockScreen(
     val isLocked = uiState is GatekeeperUiState.LockedOut
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .safeDrawingPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = "Lock",
-                modifier = Modifier.size(72.dp),
-                tint = if (isLocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = "Clear Space",
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
-            )
+                Text(
+                    text = "Clear Space",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Enter master password",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "Enter master password",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-            SecureKeyboard(
-                currentPassword = password,
-                onPasswordChange = { password = it },
-                onSubmit = {
-                    if (!isLocked) {
-                        onSubmitPassword(password)
-                        password = ""
-                    }
-                }
-            )
-
-            if (!isLocked) {
-                Spacer(modifier = Modifier.height(16.dp))
-                IconButton(
-                    onClick = {
-                        if (canUseBiometric) {
-                            onBiometricClick()
-                        } else if (password.isNotEmpty()) {
-                            onEnrollBiometric(password)
+                SecureKeyboard(
+                    currentPassword = password,
+                    onPasswordChange = { password = it },
+                    onSubmit = {
+                        if (!isLocked) {
+                            onSubmitPassword(password)
                             password = ""
                         }
-                    },
-                    modifier = Modifier.size(64.dp)
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.Lock,
-                        contentDescription = if (canUseBiometric) "Unlock with Biometrics" else "Enable Biometric Unlock",
-                        tint = if (canUseBiometric) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            AnimatedVisibility(visible = isError, enter = fadeIn(), exit = fadeOut()) {
-                Text(
-                    text = "Incorrect password.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            AnimatedVisibility(visible = isLocked, enter = fadeIn(), exit = fadeOut()) {
-                if (uiState is GatekeeperUiState.LockedOut) {
-                    Text(
-                        text = "Too many failed attempts. Locked for ${uiState.remainingSeconds}s.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            var showWipeConfirmDialog by remember { mutableStateOf(false) }
-
-            TextButton(
-                onClick = { showWipeConfirmDialog = true },
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Lost Password? Wipe App Data & Reset")
-            }
-
-            if (showWipeConfirmDialog) {
-                AlertDialog(
-                    onDismissRequest = { showWipeConfirmDialog = false },
-                    icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                    title = { Text("Wipe All Data?") },
-                    text = { 
-                        Text(
-                            "This will permanently delete your database, profile, identity keys, and all private content. It cannot be undone. Are you sure?",
-                            color = MaterialTheme.colorScheme.error
-                        ) 
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val activityManager = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-                                activityManager.clearApplicationUserData()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Wipe Everything")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showWipeConfirmDialog = false }) {
-                            Text("Cancel")
-                        }
                     }
                 )
+
+                if (!isLocked) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    IconButton(
+                        onClick = {
+                            if (canUseBiometric) {
+                                onBiometricClick()
+                            } else if (password.isNotEmpty()) {
+                                onEnrollBiometric(password)
+                                password = ""
+                            }
+                        },
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Lock,
+                            contentDescription = if (canUseBiometric) "Unlock with Biometrics" else "Enable Biometric Unlock",
+                            tint = if (canUseBiometric) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                AnimatedVisibility(visible = isError, enter = fadeIn(), exit = fadeOut()) {
+                    Text(
+                        text = "Incorrect password.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                AnimatedVisibility(visible = isLocked, enter = fadeIn(), exit = fadeOut()) {
+                    if (uiState is GatekeeperUiState.LockedOut) {
+                        Text(
+                            text = "Too many failed attempts. Locked for ${uiState.remainingSeconds}s.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                TextButton(
+                    onClick = onRecoverPassword,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Forgot Password? Recovery Options")
+                }
+
+                var showWipeConfirmDialog by remember { mutableStateOf(false) }
+
+                TextButton(
+                    onClick = { showWipeConfirmDialog = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Lost Password? Wipe App Data & Reset")
+                }
+
+                if (showWipeConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showWipeConfirmDialog = false },
+                        icon = { Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        title = { Text("Wipe All Data?") },
+                        text = { Text("This will permanently delete your encrypted database and all settings. This action cannot be undone.") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val keyManager = app.clearspace.network.crypto.KeyManager(context)
+                                    keyManager.wipeAllKeys()
+                                    
+                                    val packageManager = context.packageManager
+                                    val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+                                    val componentName = intent?.component
+                                    val mainIntent = android.content.Intent.makeRestartActivityTask(componentName)
+                                    context.startActivity(mainIntent)
+                                    Runtime.getRuntime().exit(0)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Wipe & Reset")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showWipeConfirmDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 }
-

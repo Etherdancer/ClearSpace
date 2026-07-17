@@ -25,6 +25,9 @@ import app.clearspace.network.storage.db.entity.BlockedAuthor
 import app.clearspace.network.storage.db.dao.BlockedAuthorDao
 import app.clearspace.network.storage.db.dao.BlacklistDao
 import app.clearspace.network.storage.db.entity.BlacklistEntry
+import app.clearspace.network.storage.db.entity.SpaceEntity
+import app.clearspace.network.storage.db.entity.ModeratorEntity
+import app.clearspace.network.storage.db.dao.SpaceDao
 
 @Database(
     entities = [
@@ -37,9 +40,11 @@ import app.clearspace.network.storage.db.entity.BlacklistEntry
         TrustGroup::class,
         GroupMember::class,
         BlockedAuthor::class,
-        BlacklistEntry::class
+        BlacklistEntry::class,
+        SpaceEntity::class,
+        ModeratorEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 @androidx.room.TypeConverters(Converters::class)
@@ -52,8 +57,35 @@ abstract class AetherDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
     abstract fun blockedAuthorDao(): BlockedAuthorDao
     abstract fun blacklistDao(): BlacklistDao
+    abstract fun spaceDao(): SpaceDao
 
     companion object {
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `federated_spaces` (
+                        `spaceId` TEXT NOT NULL, 
+                        `name` TEXT NOT NULL, 
+                        `description` TEXT NOT NULL, 
+                        `isJoined` INTEGER NOT NULL, 
+                        `creatorAlias` TEXT NOT NULL, 
+                        `rules` TEXT NOT NULL, 
+                        `createdAt` INTEGER NOT NULL, 
+                        PRIMARY KEY(`spaceId`)
+                    )
+                """)
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `space_moderators` (
+                        `spaceId` TEXT NOT NULL, 
+                        `moderatorPubKey` TEXT NOT NULL, 
+                        `addedAt` INTEGER NOT NULL, 
+                        PRIMARY KEY(`spaceId`, `moderatorPubKey`)
+                    )
+                """)
+                database.execSQL("ALTER TABLE `content_units` ADD COLUMN `spaceId` TEXT")
+            }
+        }
+
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `content_units_fts` USING FTS4(`title`, `body`, `categoryFlags`, `authorAlias`, content=`content_units`)")
@@ -192,7 +224,7 @@ abstract class AetherDatabase : RoomDatabase() {
                 .openHelperFactory(factory)
                 .addMigrations(
                     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-                    MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
+                    MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19
                 )
                 // FIX MC1: Removed fallbackToDestructiveMigration(). A failed migration now
                 // surfaces an exception that must be caught and shown to the user, rather than
@@ -214,7 +246,7 @@ abstract class AetherDatabase : RoomDatabase() {
                 .openHelperFactory(factory)
                 .addMigrations(
                     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
-                    MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
+                    MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19
                 )
                 // FIX MC1: Removed fallbackToDestructiveMigration(). Same reason as private DB.
                 .build()

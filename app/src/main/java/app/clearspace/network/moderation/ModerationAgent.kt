@@ -91,4 +91,56 @@ class ModerationAgent(private val context: Context) {
             sharedDb.contentDao().delete(hash)
         }
     }
+
+    suspend fun syncTombstones() {
+        withContext(Dispatchers.IO) {
+            try {
+                val lastSync = prefs.getLong("last_tombstone_sync", 0)
+                val result = db.collectionGroup("tombstones")
+                    .whereGreaterThan("timestamp", lastSync)
+                    .get().await()
+
+                if (result.documents.isEmpty()) return@withContext
+
+                val privateDb = AetherDatabase.getPrivateDatabase()
+                val sharedDb = AetherDatabase.getSharedDatabase()
+
+                sharedDb.withTransaction {
+                    for (doc in result.documents) {
+                        val contentHash = doc.getString("contentHash") ?: continue
+                        val spaceId = doc.getString("spaceId") ?: continue
+                        val moderatorPubKey = doc.getString("moderatorPubKey") ?: continue
+                        val signatureBase64 = doc.getString("signatureBase64") ?: continue
+                        
+                        // 1. Check if moderatorPubKey is actually a moderator for this space
+                        val moderators = privateDb.spaceDao().getModeratorsForSpace(spaceId)
+                        val isModerator = moderators.any { it.moderatorPubKey == moderatorPubKey }
+                        
+                        if (isModerator) {
+                            // 2. Verify Cryptographic Signature
+                            val dataToSign = (contentHash + spaceId).toByteArray(Charsets.UTF_8)
+                            val pubKeyBytes = android.util.Base64.decode(moderatorPubKey, android.util.Base64.DEFAULT)
+                            val sigBytes = android.util.Base64.decode(signatureBase64, android.util.Base64.DEFAULT)
+                            
+                            val keyManager = app.clearspace.network.crypto.KeyManager(context)
+                            val isValid = try {
+                                keyManager.verifySignature(dataToSign, sigBytes, pubKeyBytes)
+                            } catch (e: Exception) { false }
+
+                            if (isValid) {
+                                // 3. Delete the content
+                                sharedDb.contentDao().delete(contentHash)
+                                privateDb.blacklistDao().insertAll(listOf(BlacklistEntry(contentHash, System.currentTimeMillis())))
+                            }
+                        }
+                    }
+                }
+                
+                prefs.edit().putLong("last_tombstone_sync", System.currentTimeMillis()).apply()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 }

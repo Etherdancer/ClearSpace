@@ -162,9 +162,6 @@ dependencies {
   implementation(libs.sqlcipher)
   implementation(libs.bouncycastle)
   implementation(libs.signal.protocol)
-  implementation(libs.kmp.tor.runtime)
-  implementation(libs.kmp.tor.resource.exec)
-  implementation(libs.kmp.tor.resource.noexec)
   implementation(libs.kotlinx.serialization.json)
   
   // CameraX and ZXing for Trust Verification (Phase 4)
@@ -182,7 +179,7 @@ dependencies {
   implementation(libs.firebase.appcheck.playintegrity)
   
   // WebRTC Data Channels (Hybrid Media Sync)
-  // implementation(libs.webrtc.android) // Temporarily disabled pending mavenCentral resolution
+  implementation(libs.webrtc.android)
   
   // ML Kit / TFLite (On-Device Filtering)
   implementation(libs.mlkit.custom)

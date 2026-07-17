@@ -117,6 +117,14 @@ class MainActivity : FragmentActivity() {
                 gatekeeperViewModel.completeOnboarding(chars)
                 java.util.Arrays.fill(chars, '\u0000')
             })
+            is GatekeeperUiState.RecoverySetup -> app.clearspace.network.ui.auth.RecoverySetupScreen(
+                dbKey = state.dbKey,
+                onComplete = { gatekeeperViewModel.completeRecoverySetup(state.dbKey) }
+            )
+            is GatekeeperUiState.Recovering -> app.clearspace.network.ui.auth.RecoveryScreen(
+                onRecovered = { dbKey -> gatekeeperViewModel.completeRecovery(dbKey) },
+                onBack = { gatekeeperViewModel.cancelRecovery() }
+            )
             is GatekeeperUiState.PromptPassword, is GatekeeperUiState.PasswordError, is GatekeeperUiState.LockedOut -> {
               LockScreen(
                   uiState = state, 
@@ -160,11 +168,14 @@ class MainActivity : FragmentActivity() {
                                   java.util.Arrays.fill(passChars, '\u0000')
                                   java.util.Arrays.fill(passCharsCopy, '\u0000')
                               },
-                              onError = { /* handle error */ }
+                              onError = { }
                           )
                       } catch (e: Exception) {
                           // Handle error
                       }
+                  },
+                  onRecoverPassword = {
+                      gatekeeperViewModel.startRecovery()
                   }
               )
             }
@@ -177,11 +188,17 @@ class MainActivity : FragmentActivity() {
                     
                     // UGC Compliance: Sync blacklist from Firebase
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                        app.clearspace.network.moderation.ModerationAgent(this@MainActivity).syncBlacklist()
+                        val moderationAgent = app.clearspace.network.moderation.ModerationAgent(this@MainActivity)
+                        moderationAgent.syncBlacklist()
+                        moderationAgent.syncTombstones()
                     }
+                    
+                    // Start ClearSync (WebRTC DataChannel Listener)
+                    app.clearspace.network.storage.sync.ClearSyncManager.getInstance(this@MainActivity).startSyncService()
                 }
                 
                 val sharedBrowseViewModel = SharedBrowseViewModel(this@MainActivity.application)
+                val spaceViewModel = app.clearspace.network.ui.feed.SpaceViewModel(this@MainActivity.application)
                 
                 val deepLinkTitleRaw = if (intent?.action == android.content.Intent.ACTION_VIEW && intent?.data?.scheme == "ClearSpace") {
                     intent?.data?.getQueryParameter("title")
@@ -212,6 +229,7 @@ class MainActivity : FragmentActivity() {
                         MainNavigation(
                             sharingToggleViewModel = sharingToggleViewModel,
                             sharedBrowseViewModel = sharedBrowseViewModel,
+                            spaceViewModel = spaceViewModel,
                             initialDeepLinkTitle = deepLinkTitle
                         )
                     }

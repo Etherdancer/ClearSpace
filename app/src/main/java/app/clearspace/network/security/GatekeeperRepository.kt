@@ -154,10 +154,62 @@ class GatekeeperRepository(private val context: Context, private val keyManager:
         editor.apply()
     }
 
+    fun isRecoverySqEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_SQ, false)
+    fun isRecoveryEkEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_EK, false)
+    fun isRecoveryBioEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_BIO, false)
+
+    fun setupSecurityQuestions(answers: List<String>, sqlCipherKey: ByteArray) {
+        keyManager.setupSecurityQuestions(answers, sqlCipherKey)
+        prefs.edit().putBoolean(PREF_RECOVERY_SQ, true).apply()
+    }
+
+    fun setupEmergencyKey(emergencyKey: ByteArray, sqlCipherKey: ByteArray) {
+        keyManager.setupEmergencyKey(emergencyKey, sqlCipherKey)
+        prefs.edit().putBoolean(PREF_RECOVERY_EK, true).apply()
+    }
+
+    fun enableBiometricRecovery() {
+        prefs.edit().putBoolean(PREF_RECOVERY_BIO, true).apply()
+    }
+
+    fun recoverWithSecurityQuestions(answers: List<String>): ByteArray? {
+        if (isLockedOut()) return null
+        val key = keyManager.recoverWithSecurityQuestions(answers)
+        if (key != null) {
+            resetFailedAttempts()
+        } else {
+            recordFailedAttempt()
+        }
+        return key
+    }
+
+    fun recoverWithEmergencyKey(emergencyKey: ByteArray): ByteArray? {
+        if (isLockedOut()) return null
+        val key = keyManager.recoverWithEmergencyKey(emergencyKey)
+        if (key != null) {
+            resetFailedAttempts()
+        } else {
+            recordFailedAttempt()
+        }
+        return key
+    }
+
+    fun resetPassword(newPassword: CharArray, sqlCipherKey: ByteArray): ByteArray {
+        val (salt, hash) = PasswordHasher.hash(newPassword, clearPassword = false)
+        val fullHash = salt + hash
+        keyManager.resetPassword(hash, sqlCipherKey)
+        keyManager.storePasswordHash(fullHash)
+        _authState.value = AuthState.Authenticated
+        return keyManager.deriveSqlCipherKey(hash)
+    }
+
     companion object {
         private const val PREF_ONBOARDING_COMPLETE = "onboarding_complete"
         private const val PREF_FAILED_ATTEMPTS = "failed_attempts"
         private const val PREF_LOCKOUT_UNTIL = "lockout_until"
+        private const val PREF_RECOVERY_SQ = "recovery_sq_enabled"
+        private const val PREF_RECOVERY_EK = "recovery_ek_enabled"
+        private const val PREF_RECOVERY_BIO = "recovery_bio_enabled"
     }
 }
 

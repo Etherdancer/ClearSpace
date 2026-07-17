@@ -29,6 +29,12 @@ fun SearchScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
     var searchResults by remember { mutableStateOf<List<GlobalProfile>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
 
+    val incomingPings by discoveryAgent.incomingPings.collectAsState()
+
+    LaunchedEffect(Unit) {
+        discoveryAgent.startListeningForPings()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -89,6 +95,38 @@ fun SearchScreen(modifier: Modifier = Modifier, onNavigateBack: () -> Unit) {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    if (incomingPings.isNotEmpty()) {
+                        item {
+                            Text("Incoming Connection Requests", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        items(incomingPings) { ping ->
+                            val senderAlias = ping["senderAlias"] as? String ?: "Unknown"
+                            val senderId = ping["senderId"] as? String ?: ""
+                            val docId = ping["docId"] as? String ?: ""
+                            
+                            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(senderAlias, style = MaterialTheme.typography.titleMedium)
+                                        Text("Wants to connect", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { coroutineScope.launch { discoveryAgent.rejectPing(docId) } }) {
+                                            Text("Decline", color = MaterialTheme.colorScheme.error)
+                                        }
+                                        Button(onClick = { coroutineScope.launch { discoveryAgent.acceptPing(docId, senderId, senderAlias) } }) {
+                                            Text("Accept")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                        item {
+                            Text("Search Results", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+
                     items(searchResults) { profile ->
                         GlobalProfileCard(profile = profile, onPing = {
                             coroutineScope.launch {

@@ -54,6 +54,7 @@ import kotlinx.coroutines.withContext
 fun MainNavigation(
     sharingToggleViewModel: SharingToggleViewModel,
     sharedBrowseViewModel: SharedBrowseViewModel,
+    spaceViewModel: app.clearspace.network.ui.feed.SpaceViewModel,
     initialDeepLinkTitle: String? = null
 ) {
   val backStack = rememberNavBackStack(FeedTab)
@@ -173,12 +174,37 @@ fun MainNavigation(
         entryProvider =
           entryProvider {
             entry<FeedTab> {
+              app.clearspace.network.ui.feed.SpaceDirectoryScreen(
+                  viewModel = spaceViewModel,
+                  onSpaceSelected = { space ->
+                      backStack.add(SpaceFeed(space.spaceId, space.name))
+                  },
+                  onCreateSpace = {
+                      backStack.add(CreateSpace)
+                  }
+              )
+            }
+            entry<SpaceFeed> { key ->
               SharedBrowseScreen(
                   modifier = Modifier.padding(paddingValues), 
                   viewModel = sharedBrowseViewModel,
+                  spaceId = key.spaceId,
+                  spaceName = key.spaceName,
                   onShareToGroup = { title, body ->
                       backStack.add(CreateContent(prefillTitle = title, prefillBody = body, forceVisibilityGroup = true))
-                  }
+                  },
+                  onBack = { backStack.removeLastOrNull() },
+                  onCreateContent = { backStack.add(CreateContent(spaceId = key.spaceId)) }
+              )
+            }
+            entry<CreateSpace> {
+              val context = androidx.compose.ui.platform.LocalContext.current
+              val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+              val profileAlias = prefs.getString("profile_alias", "Anonymous") ?: "Anonymous"
+              app.clearspace.network.ui.feed.CreateSpaceScreen(
+                  onBack = { backStack.removeLastOrNull() },
+                  viewModel = spaceViewModel,
+                  creatorAlias = profileAlias
               )
             }
             entry<SocialTab> {
@@ -201,7 +227,8 @@ fun MainNavigation(
                   onNavigateBack = { backStack.removeLastOrNull() },
                   initialTitle = key.prefillTitle ?: "",
                   initialBody = key.prefillBody ?: "",
-                  forceVisibilityGroup = key.forceVisibilityGroup
+                  forceVisibilityGroup = key.forceVisibilityGroup,
+                  spaceId = key.spaceId
               )
             }
             entry<ProfileSettings> {
@@ -267,6 +294,9 @@ fun MainNavigation(
                               val isValid = keyManager.verifySignature(rToken.toByteArray(Charsets.UTF_8), sigBytes, pkBytes)
                               
                               if (isValid) {
+                                  val webRtcManager = app.clearspace.network.network.WebRtcManager.getInstance(context)
+                                  webRtcManager.startCall(roomId = rToken, isCaller = false)
+                                  
                                   val db = app.clearspace.network.storage.db.AetherDatabase.getPrivateDatabase()
                                   CoroutineScope(Dispatchers.IO).launch {
                                       db.peerDao().insert(

@@ -15,7 +15,7 @@ import kotlin.math.max
 
 object MediaUtils {
 
-    fun compressAndSaveImage(context: Context, uri: Uri, maxSize: Int = 2048): Pair<String, String>? {
+    fun compressAndSaveImage(context: Context, uri: Uri, maxSize: Int = 4096): Pair<String, String>? {
         return try {
             val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
             val originalBitmap = BitmapFactory.decodeStream(inputStream)
@@ -29,23 +29,29 @@ object MediaUtils {
                 originalBitmap
             }
 
-            // Save full scaled image
-            val fileName = "img_${UUID.randomUUID()}.jpg"
+            // Save full scaled image using WebP
+            val fileName = "img_${UUID.randomUUID()}.webp"
             val file = File(context.filesDir, fileName)
             val outputStream = FileOutputStream(file)
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+            val compressFormat = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+                @Suppress("DEPRECATION")
+                Bitmap.CompressFormat.WEBP
+            }
+            scaledBitmap.compress(compressFormat, 95, outputStream)
             outputStream.flush()
             outputStream.close()
 
             // Generate tiny thumbnail
-            val thumbScale = max(scaledBitmap.width.toFloat() / 150, scaledBitmap.height.toFloat() / 150)
+            val thumbScale = max(scaledBitmap.width.toFloat() / 250, scaledBitmap.height.toFloat() / 250)
             val tinyBitmap = if (thumbScale > 1) {
                 Bitmap.createScaledBitmap(scaledBitmap, (scaledBitmap.width / thumbScale).toInt(), (scaledBitmap.height / thumbScale).toInt(), true)
             } else {
                 scaledBitmap
             }
             val thumbOutputStream = ByteArrayOutputStream()
-            tinyBitmap.compress(Bitmap.CompressFormat.JPEG, 60, thumbOutputStream)
+            tinyBitmap.compress(compressFormat, 85, thumbOutputStream)
             val base64Thumb = Base64.encodeToString(thumbOutputStream.toByteArray(), Base64.NO_WRAP)
 
             if (originalBitmap != scaledBitmap) originalBitmap.recycle()
@@ -74,7 +80,7 @@ object MediaUtils {
                 frame
             }
             val thumbOutputStream = ByteArrayOutputStream()
-            tinyBitmap.compress(Bitmap.CompressFormat.JPEG, 60, thumbOutputStream)
+            tinyBitmap.compress(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP, 85, thumbOutputStream)
             val base64Thumb = Base64.encodeToString(thumbOutputStream.toByteArray(), Base64.NO_WRAP)
             frame.recycle()
             tinyBitmap.recycle()
@@ -113,7 +119,13 @@ object MediaUtils {
             val fileName = "avatar_${UUID.randomUUID()}.jpg"
             val file = File(context.filesDir, fileName)
             val outputStream = FileOutputStream(file)
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+            val compressFormat = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+                @Suppress("DEPRECATION")
+                Bitmap.CompressFormat.WEBP
+            }
+            scaledBitmap.compress(compressFormat, 90, outputStream)
             outputStream.flush()
             outputStream.close()
 

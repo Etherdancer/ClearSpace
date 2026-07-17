@@ -2,18 +2,18 @@ package app.clearspace.network.theme
 
 import androidx.compose.ui.graphics.Color
 
-// 1. Clear Space Default (The Signature Look)
-// Vibe: Deep space, privacy-first, atmospheric, sleek.
-val CsBackground = Color(0xFF000000)
-val CsSurface = Color(0xFF0A0F0D)
-val CsPrimary = Color(0xFF00E5FF) // Neon Teal
-val CsOnPrimary = Color(0xFF000000)
-val CsPrimaryContainer = Color(0xFF005A64)
-val CsOnPrimaryContainer = Color(0xFFB0FBFF)
-val CsSecondary = Color(0xFFE1E3DF) // Ethereal Silver
+// 1. Clear Space Default (Premium Midnight Indigo)
+// Vibe: Premium, modern, sleek dark mode with vibrant indigo accents.
+val CsBackground = Color(0xFF0B0F19)
+val CsSurface = Color(0xFF111827)
+val CsPrimary = Color(0xFF6366F1) // Vibrant Indigo
+val CsOnPrimary = Color(0xFFFFFFFF)
+val CsPrimaryContainer = Color(0xFF3730A3)
+val CsOnPrimaryContainer = Color(0xFFE0E7FF)
+val CsSecondary = Color(0xFF9CA3AF) // Sleek Gray
 val CsOnSecondary = Color(0xFF000000)
-val CsSecondaryContainer = Color(0xFF2A2E2C)
-val CsOnSecondaryContainer = Color(0xFFE1E3DF)
+val CsSecondaryContainer = Color(0xFF1F2937)
+val CsOnSecondaryContainer = Color(0xFFF3F4F6)
 
 // 2. Light Theme (Airy & Clean)
 // Vibe: Open, transparent, uncluttered.

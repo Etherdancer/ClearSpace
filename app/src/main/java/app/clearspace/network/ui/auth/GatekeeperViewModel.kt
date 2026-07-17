@@ -88,8 +88,24 @@ class GatekeeperViewModel(
         }
     }
 
+    fun startRecovery() {
+        _uiState.value = GatekeeperUiState.Recovering
+    }
+
+    fun cancelRecovery() {
+        updateLockoutState()
+    }
+
+    fun completeRecovery(dbKey: ByteArray) {
+        _uiState.value = GatekeeperUiState.Authenticated(dbKey)
+    }
+
     fun completeOnboarding(password: CharArray) {
         val dbKey = repository.completeOnboarding(password)
+        _uiState.value = GatekeeperUiState.RecoverySetup(dbKey)
+    }
+
+    fun completeRecoverySetup(dbKey: ByteArray) {
         _uiState.value = GatekeeperUiState.Authenticated(dbKey)
     }
 
@@ -109,9 +125,11 @@ class GatekeeperViewModel(
 sealed class GatekeeperUiState {
     object Loading : GatekeeperUiState()
     object Onboarding : GatekeeperUiState()
+    data class RecoverySetup(val dbKey: ByteArray) : GatekeeperUiState()
     object PromptPassword : GatekeeperUiState()
     object PasswordError : GatekeeperUiState()
     data class LockedOut(val remainingSeconds: Long) : GatekeeperUiState()
+    object Recovering : GatekeeperUiState()
     data class Authenticated(val dbKey: ByteArray) : GatekeeperUiState()
     object Active : GatekeeperUiState()
     data class UpdateRequired(val downloadUrl: String) : GatekeeperUiState()

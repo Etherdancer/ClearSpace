@@ -11,7 +11,6 @@ import kotlinx.coroutines.tasks.await
 import app.clearspace.network.storage.db.entity.ContentUnit
 import app.clearspace.network.crypto.GroupEncryption
 import app.clearspace.network.storage.db.AetherDatabase
-import app.clearspace.network.network.TorMediaService
 import app.clearspace.network.storage.db.entity.KnownPeer
 import java.io.File
 
@@ -82,30 +81,12 @@ class AetherMessagingService : FirebaseMessagingService() {
                     privateDb.contentDao().insert(contentUnit)
                     Log.d("AetherMessagingService", "Saved new remote content: ${contentUnit.contentHash}")
                     
-                    // Check if we need to download media over Tor
+                    // Check if we need to download media
                     if (contentUnit.imagePath != null || contentUnit.videoPath != null) {
                         val expectedPath = contentUnit.videoPath ?: contentUnit.imagePath!!
                         if (!File(expectedPath).exists()) {
-                            Log.d("AetherMessagingService", "Media missing locally. Looking up sender's Onion address.")
-                            
-                            val senderPub = contentUnit.authorPublicKeyBase64
-                            if (senderPub != null) {
-                                val senderPeer = privateDb.peerDao().getByPublicKey(senderPub)
-                                
-                                val onionAddress = senderPeer?.onionAddress
-                                if (onionAddress != null) {
-                                    val mediaIntent = Intent(applicationContext, TorMediaService::class.java).apply {
-                                        action = TorMediaService.ACTION_DOWNLOAD_STREAM
-                                        putExtra(TorMediaService.EXTRA_CONTENT_HASH, contentUnit.contentHash)
-                                        putExtra(TorMediaService.EXTRA_ONION_ADDRESS, onionAddress as String)
-                                    }
-                                    startService(mediaIntent)
-                                } else {
-                                    Log.e("AetherMessagingService", "Cannot download media: Sender's Onion address is unknown.")
-                                }
-                            } else {
-                                Log.e("AetherMessagingService", "Cannot download media: Content lacks author public key.")
-                            }
+                            Log.d("AetherMessagingService", "Media missing locally. WebRTC signaling will handle download later.")
+                            // TODO: Trigger WebRTC signaling download
                         }
                     }
                     
