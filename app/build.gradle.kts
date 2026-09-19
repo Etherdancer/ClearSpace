@@ -19,7 +19,7 @@ android {
     defaultConfig {
         applicationId = "app.clearspace.network"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 37
         versionName = "0.4.3"
     }
