@@ -1,53 +1,103 @@
-# Clear Space
+# Clear Space 🌐🔒
 
-**Clear Space** is a decentralized, hybrid content-sharing platform and social network. The user has absolute sovereignty over what is shared, what is kept private, and who they interact with. Privacy is the foundation, but we take a pragmatic approach to ensure global connectivity and Google Play compliance.
+[![Android](https://img.shields.io/badge/Platform-Android_API_36-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![UI](https://img.shields.io/badge/UI-Jetpack_Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Network](https://img.shields.io/badge/P2P-Mesh_%2B_Tor-7D4698?style=for-the-badge&logo=torproject&logoColor=white)](https://www.torproject.org/)
+[![Fastlane](https://img.shields.io/badge/CI%2FCD-Fastlane-00F2A6?style=for-the-badge&logo=fastlane&logoColor=black)](https://fastlane.tools/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/agpl-3.0)
 
-> **⚠️ WARNING:** This app operates on a strict *User-at-Own-Risk* model. Because core public data is stored on your physical device and broadcast locally, you are responsible for what you share. The developer assumes zero liability for data loss or the consequences of usage.
+> **Clear Space** is a decentralized, hybrid content-sharing platform and peer-to-peer social network. The user maintains absolute cryptographic sovereignty over what is shared, what remains private, and network interactions. Built for Android with Jetpack Compose, embedded Tor onion routing, and local zero-server proximity mesh.
 
-## Core Architecture & Features
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Client ["Client Device (Android Keystore / SQLCipher AES-256)"]
+        UI["Jetpack Compose UI"] --> Domain["Domain Services & Reputation Engine"]
+        Domain --> Storage["Hardware-Backed Encrypted DB (SQLCipher)"]
+        
+        Domain --> NetManager["Hybrid Network Router"]
+    end
+    
+    subgraph LocalMesh ["Zero-Server Local Proximity Mesh"]
+        NetManager --> BLE["Bluetooth Low Energy (BLE)"]
+        NetManager --> WiFiDirect["Wi-Fi Direct P2P"]
+        NetManager --> NSD["Local LAN (mDNS / NSD)"]
+    end
+    
+    subgraph GlobalSync ["Global Anonymized Transport"]
+        NetManager --> Tor["Embedded Tor Onion Routing (kmp-tor)"]
+        NetManager --> E2EEDeadDrop["Firestore E2EE Dead-Drop (Encrypted Payloads)"]
+        NetManager --> WebRTC["Direct WebRTC Media Streaming"]
+    end
+```
+
+---
+
+## ⚡ Core Architecture & Features
 
 1. **Hybrid Network Topology**:
    - **Local Public Network**: Public content operates on a zero-server mesh network. It broadcasts locally via Bluetooth Low Energy (BLE), Wi-Fi Direct, and Local LAN (mDNS/NSD).
-   - **Global Trusted Sync**: Content shared with Trusted Contacts or Groups is routed globally over the internet.
-2. **Minimal Cloud Footprint**: To enable global sync while preserving privacy, we use Firebase Firestore purely as an End-to-End Encrypted "Dead Drop" for text, and direct WebRTC connections for large media.
-3. **Hardware-Backed Encryption**: All data is encrypted at rest using SQLCipher (AES-256-GCM) with keys bound to the Android Keystore's secure element (StrongBox/TEE).
-4. **Decentralized Reputation**: Content quality is managed via an anonymous, cryptographic token-voting system. Duplicate votes from the same device are mathematically impossible.
-5. **Physical Devices Only**: Emulators and virtual devices are strictly blocked to prevent bot networks and fake voting farms.
+   - **Global Trusted Sync**: Content shared with Trusted Contacts or Groups is routed globally over the internet via embedded Tor (`kmp-tor`) and encrypted WebRTC channels.
+2. **Minimal Cloud Footprint**: Firebase Firestore acts purely as an End-to-End Encrypted (E2EE) "dead drop" for asynchronous message exchange—zero plaintext is ever accessible remotely.
+3. **Hardware-Backed Encryption**: All data is encrypted at rest using SQLCipher (AES-256-GCM) with master keys securely bound to the Android Keystore's StrongBox / Trusted Execution Environment (TEE).
+4. **Decentralized Reputation & Anti-Abuse**:
+   - Cryptographic Proof-of-Work (PoW) token-voting system ensures Sybil resistance and prevents duplicate voting without requiring centralized user identification.
+   - Dynamic client-side consensus automatically prunes malicious or policy-violating content once localized report thresholds are verified.
+5. **Physical Device Attestation**: Emulators and virtual device farms are restricted via hardware integrity checks to eliminate bot networks.
 
-## Distribution & Compliance
+---
 
-Clear Space is distributed via both **Google Play** and **GitHub Releases**. 
+## 📂 Repository Structure
 
-To comply with Google Play's strict User Generated Content (UGC) policies, satisfy laws and regulations regarding content moderation, and ensure GDPR compliance:
-- **Mandatory Moderation:** We use a dynamic **Client-Side Consensus** algorithm. Anonymous report tokens are passed through the network, and your device independently deletes abusive, illegal, or policy-violating content once a dynamically scaled threshold of reports is reached.
-- **Privacy by Default & User Control:** Your private data is completely isolated and stays entirely on your device. Tracking is kept to the absolute minimum required for this safety moderation and global routing. We use this minimal tracking just to be able to publish on the Google Play store and to satisfy laws and regulations. We do not use analytics for marketing or advertising.
+```text
+├── app/                        # Main Android application module (Jetpack Compose, Domain, DI)
+├── kmp-tor-sources/            # Embedded Tor onion routing integration layer
+├── kmp-tor-resource-sources/   # Native Tor runtime binaries and assets
+├── fastlane/                   # Automated store release and screenshot pipelines
+├── scripts/                    # PowerShell release framing and automated capture utilities
+├── CONTRIBUTING.md             # Contribution guidelines & coding conventions
+├── PRIVACY.md                  # Comprehensive privacy & cryptographic guarantees
+└── build.gradle.kts            # Project root build script
+```
 
-### How to Build
+---
 
-1. Clone the repository.
-2. Ensure you have the Android SDK (API 36) installed.
-3. Add your `google-services.json` to the `app/` directory if you are building with Firebase features enabled.
-4. Build the APK using the standard Gradle wrapper:
+## 🛠️ How to Build
 
+### Prerequisites
+- Android Studio Ladybug or newer
+- Android SDK (API 36, Build Tools 36.0.0)
+- Java 17+ (e.g., via SDKMAN / OpenJDK)
+
+### Compilation
 ```bash
+# Clone the repository
+git clone https://github.com/Etherdancer/ClearSpace.git
+cd ClearSpace
+
+# Build debug APK:
 ./gradlew assembleDebug
-# OR for release:
+
+# Build release APK:
 ./gradlew assembleRelease
 ```
 
-## Contributing
+---
 
-Clear Space balances extreme privacy with pragmatic real-world usability. Please review our [Contributing Guidelines](CONTRIBUTING.md) before submitting PRs. Open an issue to discuss major architectural changes, especially those involving network routing or data storage.
+## 🤝 Open Source & Acknowledgements
 
-## Acknowledgements / Open Source Credits
+Clear Space is inspired by and incorporates patterns from leaders in privacy engineering:
+- **[CoffeeHouseInfo](https://github.com/coffeehouseinfo):** Decentralized, anonymous `ReputationAgent` and PoW token voting.
+- **[kmp-tor](https://github.com/05nelsonm/kmp-tor):** Embedded Tor controller and daemon for Kotlin Multiplatform / Android.
+- **[Signal Protocol](https://signal.org/):** End-to-end cryptographic ratcheting patterns.
+- **[SQLCipher](https://www.zetetic.net/sqlcipher/):** Full database encryption at rest.
 
-Clear Space was built upon and inspired by several excellent open-source projects:
-- **[CoffeeHouseInfo](https://github.com/coffeehouseinfo):** Our decentralized, anonymous `ReputationAgent` and PoW token voting system is a direct evolution of the reputation mechanisms originally designed for the CoffeeHouseInfo application.
-- **Android Proximity Technologies:** We utilize Android's built-in network discovery (mDNS/NSD, Wi-Fi Direct, BLE), inspired by robust open-source `DiscoveryManager` library patterns.
-- **[TensorFlow Lite](https://www.tensorflow.org/lite):** Powering our zero-server-cost, on-device AI moderation and NSFW image filtering.
-- **[HeliBoard](https://github.com/Helium314/HeliBoard) & [Bitwarden](https://github.com/bitwarden/mobile):** Inspired our strict approaches to incognito keyboard usage and secure local vault storage.
-- **Core Security & Networking Libraries:** We gratefully acknowledge the giants whose open-source libraries make secure Android development possible: [Signal Protocol](https://signal.org/), [Tor for Android (Guardian Project)](https://guardianproject.info/apps/org.torproject.android/), [Syncthing](https://syncthing.net/), [SQLCipher](https://www.zetetic.net/sqlcipher/), and [BouncyCastle](https://www.bouncycastle.org/).
-- **Media & Utilities:** [ExoPlayer](https://exoplayer.dev/), [ZXing](https://github.com/zxing/zxing), and [OSMDroid](https://github.com/osmdroid/osmdroid).
+---
 
-## License
+## 📄 License
+
 This project is licensed under the **GNU Affero General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
