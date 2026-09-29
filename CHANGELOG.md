@@ -3,7 +3,7 @@
 All notable changes to Clear Space are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.4.4] - 2026-09-29
+## [0.4.5] - 2026-09-29
 
 ### Security
 - **Release keystore removed from the repository.** `app/clearspace-release.jks` was
