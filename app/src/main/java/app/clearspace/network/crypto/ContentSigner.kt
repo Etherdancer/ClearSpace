@@ -46,6 +46,16 @@ object ContentSigner {
      * Returns false only when a signature IS present but fails verification — indicating
      * deliberate tampering or author impersonation.
      */
+    /**
+     * Strict check for content received from the network: a signature is REQUIRED.
+     * Accepting unsigned content would let any peer publish under any alias simply by
+     * leaving the signature fields out.
+     */
+    fun verifyStrict(unit: ContentUnit, keyManager: KeyManager): Boolean {
+        if (unit.authorSignatureBase64 == null || unit.authorPublicKeyBase64 == null) return false
+        return verify(unit, keyManager)
+    }
+
     fun verify(unit: ContentUnit, keyManager: KeyManager): Boolean {
         val sigB64 = unit.authorSignatureBase64 ?: return true   // Legacy: no signature = accept
         val pubB64 = unit.authorPublicKeyBase64 ?: return true   // Legacy: no public key = accept

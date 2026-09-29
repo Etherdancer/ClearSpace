@@ -25,19 +25,37 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && resource.data.senderUid == request.auth.uid;
     }
 
-    // Client-submitted reports: write only, no read
-    match /reports/{reportId} {
+    // Client-submitted content reports: write only, no read.
+    // Create-only: `write` also allowed update/delete, so anyone could erase others' reports.
+    // Named content_reports (not reports) so the collection-group rule below doesn't expose it.
+    match /content_reports/{reportId} {
       allow read: if false;
-      allow write: if request.auth != null 
-                   && request.resource.data.keys().hasOnly(['contentHash', 'reason', 'timestamp']);
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly(['contentHash', 'reason', 'timestamp'])
+                    && request.resource.data.contentHash is string
+                    && request.resource.data.contentHash.size() <= 128
+                    && request.resource.data.reason is string
+                    && request.resource.data.reason.size() <= 500
+                    && request.resource.data.timestamp is int;
+      allow update, delete: if false;
     }
 
     // Global report blacklist submissions: write to subcollection, read for clients for local consensus
     match /global_blacklist/{hash}/reports/{token} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null 
-                   && request.resource.data.keys().hasOnly(['reportToken', 'timestamp'])
-                   && token == request.resource.data.reportToken;
+      // Create-only, so report tokens can't be deleted to undo someone else's report.
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly(['reportToken', 'timestamp'])
+                    && token == request.resource.data.reportToken
+                    && request.resource.data.timestamp is int;
+      allow update, delete: if false;
+    }
+
+    // ModerationAgent syncs with collectionGroup("reports"). Collection-group queries
+    // are only evaluated against recursive-wildcard rules, so without this the sync
+    // was always denied. Only global_blacklist/{hash}/reports documents are written.
+    match /{path=**}/reports/{token} {
+      allow read: if request.auth != null;
     }
 
     // Deny everything else

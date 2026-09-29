@@ -18,13 +18,14 @@ class ContentReporter(private val context: Context) {
                 if (auth.currentUser == null) {
                     auth.signInAnonymously().await()
                 }
-                // Add the report to a "reports" collection for review
+                // Add the report to "content_reports" for review (kept apart from the
+                // global_blacklist/*/reports collection group that clients may read)
                 val report = hashMapOf(
                     "contentHash" to contentHash,
                     "reason" to reason,
                     "timestamp" to System.currentTimeMillis()
                 )
-                db.collection("reports").add(report).await()
+                db.collection("content_reports").add(report).await()
             } catch (e: Exception) {
                 e.printStackTrace()
             }

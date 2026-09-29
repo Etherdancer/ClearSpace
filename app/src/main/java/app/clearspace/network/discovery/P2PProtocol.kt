@@ -21,7 +21,6 @@ import app.clearspace.network.storage.db.entity.RelayPacket
 import app.clearspace.network.storage.db.entity.SecurityLogEntry
 import app.clearspace.network.storage.db.entity.Visibility
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.net.ServerSocket
 import java.net.Socket
@@ -82,7 +81,9 @@ class P2PServer(
     fun start(): Int {
         if (isRunning.get()) return localPort
         
-        serverSocket = SecureP2PManager.getServerSocketFactory().createServerSocket(0)
+        // Requests client certificates so isTrustedPeer() can recognise pinned peers.
+        // (Without this the peer chain was always empty and trusted-only commands always failed.)
+        serverSocket = SecureP2PManager.createServerSocket(0)
         localPort = serverSocket!!.localPort
         isRunning.set(true)
 
@@ -112,27 +113,31 @@ class P2PServer(
 
     private fun handleClient(socket: Socket) {
         val ip = socket.inetAddress?.hostAddress ?: "unknown"
-        val currentCount = activeConnections.getOrDefault(ip, 0)
-        if (currentCount >= MAX_CONNECTIONS_PER_IP) {
+        // Atomic check-and-increment: a get-then-put let simultaneous connections exceed the cap.
+        var admitted = false
+        activeConnections.compute(ip) { _, current ->
+            val c = current ?: 0
+            if (c >= MAX_CONNECTIONS_PER_IP) c else { admitted = true; c + 1 }
+        }
+        if (!admitted) {
             P2PClient.logSecurityEvent("RATE_LIMIT_EXCEEDED", "peer=$ip")
             try { socket.close() } catch (e: Exception) {}
             return
         }
-        
+
         val totalCount = activeTotalConnections.incrementAndGet()
-        activeConnections[ip] = currentCount + 1
 
         try {
             socket.use { s ->
-                val reader = InputStreamReader(s.getInputStream())
-                val writer = PrintWriter(s.getOutputStream(), true)
+                val input = java.io.BufferedInputStream(s.getInputStream())
+                val writer = PrintWriter(java.io.OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8), true)
 
                 if (totalCount > 8) {
                     writer.println("ERROR: BUSY")
                     return@use
                 }
 
-                val request = readBoundedLine(s.getInputStream(), 4096) ?: return@use
+                val request = LineIO.readLine(input, 4096) ?: return@use
                 val parts = request.split(" ")
                 var command = parts[0]
 
@@ -211,34 +216,12 @@ class P2PServer(
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
-            val newCount = activeConnections.getOrDefault(ip, 1) - 1
-            if (newCount <= 0) {
-                activeConnections.remove(ip)
-            } else {
-                activeConnections[ip] = newCount
-            }
+            activeConnections.computeIfPresent(ip) { _, c -> if (c <= 1) null else c - 1 }
             activeTotalConnections.decrementAndGet()
             try { socket.close() } catch (e: Exception) {}
         }
     }
 
-    // Prevents memory exhaustion attacks (infinite strings without newlines)
-    private fun readBoundedLine(input: InputStream, maxLength: Int): String? {
-        val builder = java.lang.StringBuilder()
-        var count = 0
-        while (count < maxLength) {
-            val byte = input.read()
-            if (byte == -1) break
-            val char = byte.toChar()
-            if (char == '\n') break
-            if (char != '\r') {
-                builder.append(char)
-                count++
-            }
-        }
-        if (count >= maxLength) return null // Drop connection if limit exceeded
-        return if (builder.isEmpty()) null else builder.toString()
-    }
 }
 
 object P2PClient {
@@ -268,22 +251,9 @@ object P2PClient {
         }
     }
 
-    // Shared read bounded buffer logic (5 MB limit for large responses)
+    // Shared bounded read (5 MB limit for large responses); UTF-8 safe, buffered.
     private suspend fun readBoundedResponse(input: InputStream, maxLength: Int = 5_000_000): String? {
-        val builder = java.lang.StringBuilder()
-        var count = 0
-        while (count < maxLength) {
-            val byte = input.read()
-            if (byte == -1) break
-            val char = byte.toChar()
-            if (char == '\n') break
-            if (char != '\r') {
-                builder.append(char)
-                count++
-            }
-        }
-        if (count >= maxLength) return null // Protection against memory DoS
-        val response = if (builder.isEmpty()) null else builder.toString()
+        val response = LineIO.readLine(java.io.BufferedInputStream(input), maxLength)
         if (response != null && response.startsWith("ERROR: BUSY")) {
             kotlinx.coroutines.delay((1000L..3000L).random())
             return null
@@ -297,7 +267,7 @@ object P2PClient {
             socket.use { s ->
                 s.connect(java.net.InetSocketAddress(ip, port), 2000)
                 s.soTimeout = 5000
-                val writer = java.io.PrintWriter(s.getOutputStream(), true)
+                val writer = java.io.PrintWriter(java.io.OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8), true)
                 writer.println("INDEX_v1 ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream())
@@ -317,7 +287,7 @@ object P2PClient {
             socket.use { s ->
                 s.connect(java.net.InetSocketAddress(ip, port), 2000)
                 s.soTimeout = 10000
-                val writer = java.io.PrintWriter(s.getOutputStream(), true)
+                val writer = java.io.PrintWriter(java.io.OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8), true)
                 writer.println("GET_v1 $hash ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream())
@@ -338,7 +308,8 @@ object P2PClient {
                         }
                         // FIX C3: Verify Ed25519 authorship signature
                         val keyManager = app.clearspace.network.crypto.KeyManager(appContext)
-                        if (!app.clearspace.network.crypto.ContentSigner.verify(unit, keyManager)) {
+                        // Network content must be signed (unsigned = could be anyone).
+                        if (!app.clearspace.network.crypto.ContentSigner.verifyStrict(unit, keyManager)) {
                             logSecurityEvent("CONTENT_REJECTED_SIGNATURE_INVALID", "peer=$ip hash=$hash alias=${unit.authorAlias}")
                             return@withContext null
                         }
@@ -360,7 +331,7 @@ object P2PClient {
         try {
             SecureP2PManager.getSocketFactory().createSocket(ip, port).use { socket ->
                 socket.soTimeout = 5000
-                val writer = PrintWriter(socket.getOutputStream(), true)
+                val writer = PrintWriter(java.io.OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8), true)
                 writer.println("PROFILE_v1 ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream(), 1024 * 500) // 500 KB limit for profile
@@ -378,7 +349,7 @@ object P2PClient {
         try {
             SecureP2PManager.getSocketFactory().createSocket(ip, port).use { socket ->
                 socket.soTimeout = 5000
-                val writer = PrintWriter(socket.getOutputStream(), true)
+                val writer = PrintWriter(java.io.OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8), true)
                 writer.println("RELAY_INDEX_v1 ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream(), 1024 * 1024)
@@ -396,7 +367,7 @@ object P2PClient {
         try {
             SecureP2PManager.getSocketFactory().createSocket(ip, port).use { socket ->
                 socket.soTimeout = 10000
-                val writer = PrintWriter(socket.getOutputStream(), true)
+                val writer = PrintWriter(java.io.OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8), true)
                 writer.println("GET_RELAY_v1 $packetId ${System.currentTimeMillis()}")
                 
                 val response = readBoundedResponse(socket.getInputStream(), 5_000_000)

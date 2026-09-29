@@ -10,7 +10,7 @@ import java.security.SecureRandom
 import java.util.Arrays
 
 object PasswordHasher {
-    private const val SALT_LENGTH = 16
+    const val SALT_LENGTH = 16
     private const val HASH_LENGTH = 32
     
     // 64 MB = 64 * 1024 KB
@@ -60,7 +60,7 @@ object PasswordHasher {
         return MessageDigest.isEqual(expectedHash, computedHash)
     }
 
-    private fun generateSalt(): ByteArray {
+    fun generateSalt(): ByteArray {
         val salt = ByteArray(SALT_LENGTH)
         SecureRandom().nextBytes(salt)
         return salt
