@@ -88,6 +88,14 @@ cd ClearSpace
 
 ---
 
+## 🔐 Security Notes
+
+- Release signing keys are never committed (`*.jks`, `*.keystore` and `keystore.properties` are git-ignored). Provide them locally or through CI secrets.
+- Firestore rules live in [`firestore.rules`](firestore.rules). Deploy them with `firebase deploy --only firestore:rules` after any change.
+- See [CHANGELOG.md](CHANGELOG.md) for security fixes and migration notes.
+
+---
+
 ## 🤝 Open Source & Acknowledgements
 
 Clear Space is inspired by and incorporates patterns from leaders in privacy engineering:

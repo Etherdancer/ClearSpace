@@ -30,7 +30,8 @@ object SecureP2PManager {
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
     private var sslContext: SSLContext? = null
-    
+    private var serverSslContext: SSLContext? = null
+
     fun init(context: Context) {
         if (sslContext == null) {
             sslContext = initSSLContext(context)
@@ -67,11 +68,25 @@ object SecureP2PManager {
 
         val context = SSLContext.getInstance("TLSv1.3")
         context.init(keyManagerFactory.keyManagers, trustAllCerts, SecureRandom())
+
+        // Server side: ask every client for its certificate but don't prompt the user for
+        // each stranger that browses our public INDEX. Access to trusted-only commands is
+        // decided afterwards by P2PServer.isTrustedPeer (fingerprint must be TOFU-pinned).
+        serverSslContext = SSLContext.getInstance("TLSv1.3").apply {
+            init(keyManagerFactory.keyManagers, arrayOf<TrustManager>(ClientCertificateCollector), SecureRandom())
+        }
         return context
     }
 
+    /** Server socket that requests (but doesn't require) a client certificate. */
+    fun createServerSocket(port: Int): javax.net.ssl.SSLServerSocket {
+        val server = serverSslContext!!.serverSocketFactory.createServerSocket(port) as javax.net.ssl.SSLServerSocket
+        server.wantClientAuth = true
+        return server
+    }
+
     fun getServerSocketFactory(): SSLServerSocketFactory {
-        return sslContext!!.serverSocketFactory
+        return serverSslContext!!.serverSocketFactory
     }
 
     fun getSocketFactory(): SSLSocketFactory {
@@ -149,4 +164,20 @@ class TofuTrustManager(private val prefs: SharedPreferences) : X509ExtendedTrust
         }
     }
 
+}
+
+/**
+ * Server-side trust manager: accepts any client certificate so it can be inspected later.
+ * Never used for outgoing connections (those use [TofuTrustManager]).
+ */
+object ClientCertificateCollector : X509TrustManager {
+    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+        if (chain.isNullOrEmpty()) throw CertificateException("Empty client certificate chain")
+    }
+
+    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+        throw CertificateException("Server certificates are not validated by the collector")
+    }
+
+    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
 }

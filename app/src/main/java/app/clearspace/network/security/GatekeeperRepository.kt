@@ -154,7 +154,12 @@ class GatekeeperRepository(private val context: Context, private val keyManager:
         editor.apply()
     }
 
-    fun isRecoverySqEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_SQ, false)
+    /** Only true for a usable (v2) setup; v1 setups could never recover and are hidden. */
+    fun isRecoverySqEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_SQ, false) && keyManager.hasSecurityQuestions()
+
+    /** True if the user set up security questions with the broken v1 format and must redo it. */
+    fun needsSecurityQuestionsResetup(): Boolean =
+        prefs.getBoolean(PREF_RECOVERY_SQ, false) && keyManager.hasLegacySecurityQuestions()
     fun isRecoveryEkEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_EK, false)
     fun isRecoveryBioEnabled(): Boolean = prefs.getBoolean(PREF_RECOVERY_BIO, false)
 
@@ -174,6 +179,8 @@ class GatekeeperRepository(private val context: Context, private val keyManager:
 
     fun recoverWithSecurityQuestions(answers: List<String>): ByteArray? {
         if (isLockedOut()) return null
+        // A v1 payload can never succeed; don't count attempts toward the auto-wipe.
+        if (!keyManager.hasSecurityQuestions()) return null
         val key = keyManager.recoverWithSecurityQuestions(answers)
         if (key != null) {
             resetFailedAttempts()

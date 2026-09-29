@@ -42,6 +42,8 @@ class KeyManager(context: Context) {
         private const val BIOMETRIC_KEY_ALIAS = "aether_biometric_key"
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
+        private const val KEY_RECOVERY_SQ = "recovery_sq_payload"
+        private const val SQ_V2_PREFIX = "v2:"
     }
 
     init {
@@ -355,26 +357,50 @@ class KeyManager(context: Context) {
         prefs.edit().putString(KEY_DB_SECRET, android.util.Base64.encodeToString(enc, android.util.Base64.DEFAULT)).apply()
     }
 
+    /**
+     * Normalises answers so recovery isn't defeated by case or stray whitespace
+     * ("  Zagreb " == "zagreb").
+     */
+    private fun normalizeAnswers(answers: List<String>): CharArray =
+        answers.joinToString("|") { it.trim().lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), " ") }.toCharArray()
+
+    /**
+     * Stores the SQLCipher key encrypted under an Argon2id key derived from the answers.
+     * Format (v2): "v2:" + Base64(salt[16] || iv || ciphertext).
+     *
+     * v1 hashed the answers with a random salt that was never stored, so recovery could
+     * never derive the same key again — every v1 payload is unrecoverable.
+     */
     fun setupSecurityQuestions(answers: List<String>, sqlCipherKey: ByteArray) {
-        val concatenated = answers.joinToString("|").lowercase().trim()
-        val (_, recoveryKey) = PasswordHasher.hash(concatenated.toCharArray(), clearPassword = false)
+        val salt = PasswordHasher.generateSalt()
+        val (_, recoveryKey) = PasswordHasher.hash(normalizeAnswers(answers), salt, clearPassword = true)
         val encryptedSqlCipherKey = encryptPayloadE2EE(sqlCipherKey, recoveryKey)
-        prefs.edit().putString("recovery_sq_payload", android.util.Base64.encodeToString(encryptedSqlCipherKey, android.util.Base64.DEFAULT)).apply()
         java.util.Arrays.fill(recoveryKey, 0.toByte())
+        prefs.edit()
+            .putString(KEY_RECOVERY_SQ, SQ_V2_PREFIX + Base64.encodeToString(salt + encryptedSqlCipherKey, Base64.NO_WRAP))
+            .apply()
     }
 
+    /** True if security-question recovery was set up with the broken v1 format (must be redone). */
+    fun hasLegacySecurityQuestions(): Boolean =
+        prefs.getString(KEY_RECOVERY_SQ, null)?.startsWith(SQ_V2_PREFIX) == false
+
+    fun hasSecurityQuestions(): Boolean = prefs.getString(KEY_RECOVERY_SQ, null)?.startsWith(SQ_V2_PREFIX) == true
+
     fun recoverWithSecurityQuestions(answers: List<String>): ByteArray? {
-        val payloadStr = prefs.getString("recovery_sq_payload", null) ?: return null
-        val payload = android.util.Base64.decode(payloadStr, android.util.Base64.DEFAULT)
-        val concatenated = answers.joinToString("|").lowercase().trim()
-        val (_, recoveryKey) = PasswordHasher.hash(concatenated.toCharArray(), clearPassword = false)
+        val stored = prefs.getString(KEY_RECOVERY_SQ, null) ?: return null
+        if (!stored.startsWith(SQ_V2_PREFIX)) return null // v1: salt was never stored
+        val blob = Base64.decode(stored.removePrefix(SQ_V2_PREFIX), Base64.DEFAULT)
+        if (blob.size <= PasswordHasher.SALT_LENGTH + GCM_IV_LENGTH) return null
+        val salt = blob.copyOfRange(0, PasswordHasher.SALT_LENGTH)
+        val payload = blob.copyOfRange(PasswordHasher.SALT_LENGTH, blob.size)
+        val (_, recoveryKey) = PasswordHasher.hash(normalizeAnswers(answers), salt, clearPassword = true)
         return try {
-            val key = decryptPayloadE2EE(payload, recoveryKey)
-            java.util.Arrays.fill(recoveryKey, 0.toByte())
-            key
+            decryptPayloadE2EE(payload, recoveryKey)
         } catch (e: Exception) {
-            java.util.Arrays.fill(recoveryKey, 0.toByte())
             null
+        } finally {
+            java.util.Arrays.fill(recoveryKey, 0.toByte())
         }
     }
 
